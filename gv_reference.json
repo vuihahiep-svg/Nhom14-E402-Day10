@@ -1,0 +1,53 @@
+{
+  "reference_type": "individual_report_template",
+  "title": "Báo cáo cá nhân — mẫu GV (reference)",
+  "student_name": "GV Reference",
+  "role": "Cleaning & Quality",
+  "target_length_words": 450,
+  "sections": [
+    {
+      "id": "scope",
+      "title": "Phần phụ trách cụ thể",
+      "summary": "Phụ trách cleaning rules và expectation suite; tập trung vào lỗi version/refund và dữ liệu bẩn.",
+      "evidence_paths": [
+        "transform/cleaning_rules.py",
+        "quality/expectations.py"
+      ]
+    },
+    {
+      "id": "technical_decision",
+      "title": "Một quyết định kỹ thuật",
+      "summary": "Ưu tiên expectation mức halt cho các điều kiện ảnh hưởng trực tiếp tới publish boundary.",
+      "examples": [
+        "refund_no_stale_14d_window",
+        "exported_at_present_all_cleaned_rows"
+      ]
+    },
+    {
+      "id": "anomaly",
+      "title": "Một sự cố/anomaly đã xử lý",
+      "summary": "Case inject gây hits_forbidden=true ở gq_d10_01 do top-k còn chunk stale.",
+      "resolution_steps": [
+        "Rerun pipeline chuẩn (không skip validate)",
+        "Kiểm tra embed_prune_removed trong log",
+        "Chạy lại grading_run + instructor_quick_check"
+      ]
+    },
+    {
+      "id": "before_after",
+      "title": "Bằng chứng before/after",
+      "summary": "So sánh q_refund_window trước và sau fix bằng CSV eval.",
+      "evidence_paths": [
+        "artifacts/eval/after_inject_bad.csv",
+        "artifacts/eval/before_after_eval.csv"
+      ],
+      "expected_delta": "hits_forbidden: yes -> no"
+    },
+    {
+      "id": "next_2h",
+      "title": "Cải tiến nếu có thêm 2 giờ",
+      "summary": "Theo dõi freshness ở hai boundary và bổ sung test regression cho cleaning rules."
+    }
+  ],
+  "note": "Đây là file tham chiếu để tham khảo cách viết báo cáo cá nhân khi nộp LMS."
+}
