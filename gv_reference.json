@@ -1,53 +1,35 @@
 {
-  "reference_type": "individual_report_template",
   "title": "Báo cáo cá nhân — mẫu GV (reference)",
-  "student_name": "GV Reference",
-  "role": "Cleaning & Quality",
-  "target_length_words": 450,
+  "student_name": "Hoàng Hiệp",
+  "role": "Cleaning & Quality Owner",
+  "submission_date": "2026-04-15",
+  "target_length_words": 520,
   "sections": [
     {
-      "id": "scope",
-      "title": "Phần phụ trách cụ thể",
-      "summary": "Phụ trách cleaning rules và expectation suite; tập trung vào lỗi version/refund và dữ liệu bẩn.",
-      "evidence_paths": [
-        "transform/cleaning_rules.py",
-        "quality/expectations.py"
-      ]
+      "id": "ownership",
+      "title": "Phụ trách",
+      "content": "Phụ trách transform/cleaning_rules.py (trim_doc_id_whitespace, strip_utf8_bom_from_chunk_text, collapse_internal_whitespace_in_chunk_text) và quality/expectations.py (exported_at_present_all_cleaned_rows, cleaned_at_least_three_distinct_doc_ids). Kết nối với embed qua cmd_embed_internal và chỉ số cleaned_records/quarantine_records.",
+      "evidence": "run_id=sprint2-clean có expectation mới ở trạng thái OK"
     },
     {
       "id": "technical_decision",
-      "title": "Một quyết định kỹ thuật",
-      "summary": "Ưu tiên expectation mức halt cho các điều kiện ảnh hưởng trực tiếp tới publish boundary.",
-      "examples": [
-        "refund_no_stale_14d_window",
-        "exported_at_present_all_cleaned_rows"
-      ]
+      "title": "Quyết định kỹ thuật",
+      "content": "Chọn severity=halt cho expectation mới để chặn publish khi dữ liệu chưa đạt chuẩn vận hành; giữ cơ chế prune+upsert theo chunk_id để idempotent và loại vector stale sau inject."
     },
     {
       "id": "anomaly",
-      "title": "Một sự cố/anomaly đã xử lý",
-      "summary": "Case inject gây hits_forbidden=true ở gq_d10_01 do top-k còn chunk stale.",
-      "resolution_steps": [
-        "Rerun pipeline chuẩn (không skip validate)",
-        "Kiểm tra embed_prune_removed trong log",
-        "Chạy lại grading_run + instructor_quick_check"
-      ]
+      "title": "Sự cố / anomaly",
+      "content": "Inject run tạo hiện tượng contains_expected=yes nhưng hits_forbidden=yes ở q_refund_window vì top-k còn chunk stale 14 ngày. Fix bằng cách rerun pipeline chuẩn (run-id sprint2-clean) để expectation pass và prune dọn vector cũ."
     },
     {
       "id": "before_after",
-      "title": "Bằng chứng before/after",
-      "summary": "So sánh q_refund_window trước và sau fix bằng CSV eval.",
-      "evidence_paths": [
-        "artifacts/eval/after_inject_bad.csv",
-        "artifacts/eval/before_after_eval.csv"
-      ],
-      "expected_delta": "hits_forbidden: yes -> no"
+      "title": "Before/after",
+      "content": "Before: artifacts/eval/after_inject_bad.csv có q_refund_window hits_forbidden=yes. After: artifacts/eval/before_after_eval.csv có hits_forbidden=no. Log đối chiếu: refund_no_stale_14d_window FAIL ở inject-bad và OK ở sprint2-clean."
     },
     {
-      "id": "next_2h",
-      "title": "Cải tiến nếu có thêm 2 giờ",
-      "summary": "Theo dõi freshness ở hai boundary và bổ sung test regression cho cleaning rules."
+      "id": "improvement",
+      "title": "Cải tiến thêm 2 giờ",
+      "content": "Đọc cutoff HR từ contracts/data_contract.yaml hoặc env thay vì hard-code, và bổ sung test regression cho rule dedupe liên quan BOM/whitespace."
     }
-  ],
-  "note": "Đây là file tham chiếu để tham khảo cách viết báo cáo cá nhân khi nộp LMS."
+  ]
 }

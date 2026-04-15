@@ -1,63 +1,46 @@
 # Báo cáo cá nhân — mẫu GV (reference)
 
-**Họ và tên:** GV Reference  
-**Vai trò:** Cleaning & Quality  
-**Độ dài:** ~450 từ (mẫu)
+**Họ và tên:** Hoàng Hiệp  
+**Vai trò:** Cleaning & Quality Owner  
+**Ngày nộp:** 2026-04-15  
+**Độ dài:** ~520 từ
 
 ---
 
-## 1. Phần phụ trách cụ thể
+## 1. Phụ trách
 
-Trong bài lab này, tôi phụ trách hai phần chính: chuẩn hoá dữ liệu đầu vào ở `transform/cleaning_rules.py` và kiểm soát chất lượng ở `quality/expectations.py`. Mục tiêu là đảm bảo dữ liệu trước khi embed vào vector store không còn các lỗi dễ gây “hallucination theo ngữ cảnh”, đặc biệt là xung đột policy refund (7 ngày vs 14 ngày) và policy nghỉ phép HR (12 ngày vs 10 ngày).
+Tôi phụ trách chính `transform/cleaning_rules.py` và `quality/expectations.py`. Ở phần cleaning, tôi bổ sung các rule `trim_doc_id_whitespace`, `strip_utf8_bom_from_chunk_text`, `collapse_internal_whitespace_in_chunk_text` để ổn định dedupe và hạn chế lỗi catalog giả. Ở phần quality, tôi thêm hai expectation halt: `exported_at_present_all_cleaned_rows` và `cleaned_at_least_three_distinct_doc_ids`.
 
-Cụ thể, tôi bổ sung các rule xử lý dữ liệu bẩn như loại BOM ở đầu chuỗi, chuẩn hoá khoảng trắng nội bộ, và trim `doc_id` để tránh rơi vào `unknown_doc_id` giả. Tôi cũng phối hợp với phần pipeline để đảm bảo record bị loại luôn có `reason` trong quarantine CSV, giúp truy vết và audit nhanh khi có incident.
+Kết nối với phần embed thông qua `cmd_embed_internal` trong `etl_pipeline.py` và các chỉ số theo run như `cleaned_records`, `quarantine_records`, `run_id` trên log/manifest.
 
----
-
-## 2. Một quyết định kỹ thuật quan trọng
-
-Quyết định quan trọng nhất là đặt một số expectation ở mức `halt` thay vì `warn`. Ví dụ:
-
-- `refund_no_stale_14d_window` (không được còn cụm 14 ngày trong policy hiện hành)
-- `exported_at_present_all_cleaned_rows` (mọi dòng cleaned phải có watermark thời gian)
-
-Lý do: nếu chỉ cảnh báo, pipeline vẫn publish vào index và downstream retrieval có thể trả lời “nhìn đúng top-1” nhưng vẫn kéo theo context cũ trong top-k. Với dữ liệu policy, sai ngữ cảnh là lỗi nghiêm trọng hơn lỗi style, nên `halt` giúp chặn publish boundary rõ ràng hơn.
+**Bằng chứng:** log `run_id=sprint2-clean` có đầy đủ expectation mới ở trạng thái OK.
 
 ---
 
-## 3. Một sự cố/anomaly và cách xử lý
+## 2. Quyết định kỹ thuật
 
-Sự cố điển hình là sau khi chạy inject có chủ đích (`--no-refund-fix --skip-validate`), kết quả grading cho thấy `gq_d10_01` có `contains_expected=true` nhưng `hits_forbidden=true`. Điều này nghĩa là hệ thống vẫn tìm được câu đúng “7 ngày”, nhưng trong top-k còn tồn tại chunk “14 ngày làm việc”.
+Tôi chọn để cả hai expectation mới ở mức `halt` thay vì `warn`. Lý do là nếu cho phép publish khi thiếu watermark hoặc thiếu đa dạng doc_id, retrieval vẫn chạy nhưng rủi ro trả lời sai ngữ cảnh tăng cao. Halt giúp đặt ranh giới publish rõ ràng hơn, chỉ cho phép embed khi dữ liệu đạt tối thiểu tiêu chuẩn vận hành.
 
-Quy trình xử lý:
-
-1. Chạy lại pipeline chuẩn không skip validate.
-2. Kiểm tra log có `embed_prune_removed` để xác nhận vector stale đã bị dọn.
-3. Chạy lại `grading_run.py` và `instructor_quick_check.py`.
-
-Kết quả sau fix: cả ba câu `gq_d10_01..03` đều đạt `MERIT_CHECK OK`.
+Về idempotency, tôi giữ cơ chế prune + upsert theo `chunk_id` trong Chroma để tránh giữ lại vector stale sau các lần inject.
 
 ---
 
-## 4. Bằng chứng before/after
+## 3. Sự cố / anomaly
 
-- **Before (inject):** `artifacts/eval/after_inject_bad.csv` cho `q_refund_window` có `hits_forbidden=yes`.
-- **After (clean run):** `artifacts/eval/before_after_eval.csv` cho cùng câu có `hits_forbidden=no`.
+Khi chạy inject (`--run-id inject-bad --no-refund-fix --skip-validate`), kết quả retrieval cho `q_refund_window` xuất hiện tình huống `contains_expected=yes` nhưng `hits_forbidden=yes`. Nguyên nhân là top-k vẫn còn chunk chứa cụm cũ “14 ngày làm việc”.
 
-Log run tốt có thể tham chiếu:
-
-- `artifacts/logs/run_fix-pass-debug.log` (hoặc run chuẩn tương đương)
-- `artifacts/manifests/manifest_fix-pass-debug.json`
-
-Hai artifact này đủ để chứng minh dữ liệu đã qua clean + validate + publish nhất quán.
+Cách xử lý: chạy lại pipeline chuẩn `python etl_pipeline.py run --run-id sprint2-clean`, đảm bảo expectation pass và prune loại vector không còn trong cleaned.
 
 ---
 
-## 5. Hướng cải tiến nếu có thêm 2 giờ
+## 4. Before/after
 
-Nếu có thêm thời gian, tôi sẽ mở rộng quan sát chất lượng theo hai hướng:
+**Log:** `expectation[refund_no_stale_14d_window] FAIL` ở run `inject-bad`, sau đó chuyển thành `OK (halt)` ở run `sprint2-clean`.
 
-1. Đo freshness ở cả 2 boundary (ingest và publish) thay vì chỉ dùng một timestamp tổng.
-2. Viết test tự động cho một số rule nhạy cảm (BOM, stale keyword, version conflict) để tránh regression khi thay đổi cleaning logic.
+**CSV:** ở `artifacts/eval/after_inject_bad.csv`, dòng `q_refund_window` có `hits_forbidden=yes`; sau fix, `artifacts/eval/before_after_eval.csv` ghi `hits_forbidden=no`.
 
-Mục tiêu là chuyển từ “pass lab” sang “vận hành ổn định” khi dữ liệu nguồn thay đổi liên tục.
+---
+
+## 5. Cải tiến thêm 2 giờ
+
+Nếu có thêm thời gian, tôi muốn đọc cutoff HR từ `contracts/data_contract.yaml`/env thay vì hard-code trong Python, và thêm test regression cho các rule dedupe liên quan BOM/whitespace để giảm rủi ro phát sinh lại lỗi cũ.
